@@ -13,6 +13,13 @@ $sysconfig = <<SCRIPT
   ulimit -s 10240
   ulimit -c unlimited
 
+  # create FS
+  if [ ! -e /opt/media ]; then
+    mkdir -p /opt/media \
+      && mkfs.ext4 -q -F /dev/sdb \
+      && mount /dev/sdb /opt/media
+  fi
+
   service iptables stop && chkconfig iptables off
 
   # Add entries to /etc/hosts
