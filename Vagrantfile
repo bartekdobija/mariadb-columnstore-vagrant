@@ -56,14 +56,6 @@ echo "mariadb hard nofile 64000" >> /etc/security/limits.d/mariadb.conf
     && chown -R mysql:mysql /opt/media/db \
     && chmod 777 /opt/media/tmp
 
-  service iptables stop && chkconfig iptables off
-
-  # Add entries to /etc/hosts
-  ip=$(ifconfig eth1 | awk -v host=$(hostname) '/inet addr/ {print substr($2,6)}')
-  host=$(hostname)
-  echo "127.0.0.1 localhost" > /etc/hosts
-  echo "$ip $host" >> /etc/hosts
-
 SCRIPT
 
 $mariadb = <<SCRIPT
@@ -84,6 +76,9 @@ port = 3306
 socket = /usr/local/mariadb/columnstore/mysql/lib/mysql/mysql.sock
 
 [mysqld]
+
+symbolic-links=0
+
 port = 3306
 socket = /usr/local/mariadb/columnstore/mysql/lib/mysql/mysql.sock
 datadir = /usr/local/mariadb/columnstore/mysql/db
@@ -102,6 +97,8 @@ query_cache_size = 0
 thread_stack = 512K
 lower_case_table_names=1
 group_concat_max_len=512
+
+transaction-isolation=READ-COMMITTED
 
 infinidb_compression_type=2
 
@@ -126,7 +123,8 @@ plugin_dir                      = /usr/local/mariadb/columnstore/mysql/lib/plugi
 # Replication Master Server (default)
 # binary logging is required for replication
 # log-bin=mysql-bin
-# binlog_format=ROW
+binlog_format=mixed
+expire_logs_days = 3
 
 # required unique id between 1 and 2^32 - 1
 # defaults to 1 if master-host
@@ -145,19 +143,22 @@ tmpdir      = /opt/media/tmp/
 #log-update     = /path-to-dedicated-directory/hostname
 
 # Uncomment the following if you are using InnoDB tables
-#innodb_data_home_dir = /usr/local/mariadb/columnstore/mysql/lib/mysql/
-#innodb_data_file_path = ibdata1:2000M;ibdata2:10M:autoextend
-#innodb_log_group_home_dir = /usr/local/mariadb/columnstore/mysql/lib/mysql/
-#innodb_log_arch_dir = /usr/local/mariadb/columnstore/mysql/lib/mysql/
+innodb_data_home_dir = /opt/media/db/
+innodb_data_file_path = ibdata1:2000M;ibdata2:10M:autoextend
+innodb_log_group_home_dir = /opt/media/db/
+innodb_log_arch_dir = /opt/media/db/
 # You can set .._buffer_pool_size up to 50 - 80 %
 # of RAM but beware of setting memory usage too high
-#innodb_buffer_pool_size = 384M
-#innodb_additional_mem_pool_size = 20M
+innodb_buffer_pool_size = 4G
+innodb_additional_mem_pool_size = 20M
 # Set .._log_file_size to 25 % of buffer pool size
-#innodb_log_file_size = 100M
-#innodb_log_buffer_size = 8M
-#innodb_flush_log_at_trx_commit = 1
-#innodb_lock_wait_timeout = 50
+innodb_log_file_size = 512M
+innodb_log_buffer_size = 64M
+innodb_flush_log_at_trx_commit = 2
+innodb_lock_wait_timeout = 50
+innodb_file_per_table = 1
+
+innodb_flush_method = O_DIRECT
 
 [mysqldump]
 quick
