@@ -2,16 +2,46 @@
 # Basic OS configuration
 $sysconfig = <<SCRIPT
 
-  # disable IPv6
-  echo "net.ipv6.conf.all.disable_ipv6=1" > /etc/sysctl.conf 
-  echo "net.ipv6.conf.default.disable_ipv6 = 1" >> /etc/sysctl.conf
-  sysctl -f /etc/sysctl.conf
+# disable IPv6
+echo "net.ipv6.conf.all.disable_ipv6=1" > /etc/sysctl.d/99-ipv6.conf
+echo "net.ipv6.conf.default.disable_ipv6 = 1" >> /etc/sysctl.d/99-ipv6.conf
+sysctl -f /etc/sysctl.d/99-ipv6.conf
 
+# socket finetuning
+echo "net.core.somaxconn=4096" > /etc/sysctl.d/99-socks.conf
+echo "net.ipv4.tcp_fin_timeout=30" >> /etc/sysctl.d/99-socks.conf
+echo "net.ipv4.tcp_keepalive_intvl=30" >> /etc/sysctl.d/99-socks.conf
+echo "net.ipv4.tcp_keepalive_time=120" >> /etc/sysctl.d/99-socks.conf
+echo "net.ipv4.tcp_max_syn_backlog=4096" >> /etc/sysctl.d/99-socks.conf
+echo "net.core.rmem_max=16777216" >> /etc/sysctl.d/99-socks.conf
+echo "net.core.wmem_max=16777216" >> /etc/sysctl.d/99-socks.conf
+echo "net.ipv4.tcp_rmem=4096 87380 16777216" >> /etc/sysctl.d/99-socks.conf
+echo "net.ipv4.tcp_wmem=4096 65536 16777216" >> /etc/sysctl.d/99-socks.conf
+echo "net.ipv4.tcp_no_metrics_save=1" >> /etc/sysctl.d/99-socks.conf
+echo "net.core.netdev_max_backlog=30000" >> /etc/sysctl.d/99-socks.conf
 
-  # this should be a persistent config
-  ulimit -n 65536
-  ulimit -s 10240
-  ulimit -c unlimited
+# swapiness
+echo "10" > /proc/sys/vm/vfs_cache_pressure
+echo "vm.swappiness=1" > /etc/sysctl.d/99-swapiness.conf
+sysctl -f /etc/sysctl.d/99-swapiness.conf
+
+# THP - reboot needed
+echo "transparent_hugepage=never" > /etc/grub.d/20_thp
+
+# dirty ratio
+echo "vm.dirty_ratio = 10" > /etc/sysctl.d/99-dirtyratio.conf
+echo "vm.dirty_background_ratio = 3" >> /etc/sysctl.d/99-dirtyratio.conf
+sysctl -f /etc/sysctl.d/99-swapiness.conf
+
+# this should be a persistent config
+ulimit -n 65536
+ulimit -s 10240
+ulimit -c unlimited
+
+echo "mariadb soft nproc 64000" > /etc/security/limits.d/mariadb.conf
+echo "mariadb hard nproc 64000" >> /etc/security/limits.d/mariadb.conf
+echo "mariadb soft nofile 64000" >> /etc/security/limits.d/mariadb.conf
+echo "mariadb hard nofile 64000" >> /etc/security/limits.d/mariadb.conf
 
   # create FS
   if [ ! -e /opt/media ]; then
@@ -19,6 +49,12 @@ $sysconfig = <<SCRIPT
       && mkfs.ext4 -q -F /dev/sdb \
       && mount /dev/sdb /opt/media
   fi
+
+  adduser mysql
+
+  mkdir -p /opt/media/{db,tmp} \
+    && chown -R mysql:mysql /opt/media/db \
+    && chmod 777 /opt/media/tmp
 
   service iptables stop && chkconfig iptables off
 
@@ -105,7 +141,7 @@ relay-log-index = /usr/local/mariadb/columnstore/mysql/db/relay-bin.index
 relay-log-info-file = /usr/local/mariadb/columnstore/mysql/db/relay-bin.info
 
 # Point the following paths to different dedicated disks
-tmpdir      = /sample/
+tmpdir      = /opt/media/tmp/
 #log-update     = /path-to-dedicated-directory/hostname
 
 # Uncomment the following if you are using InnoDB tables
@@ -168,7 +204,7 @@ Vagrant.configure(2) do |config|
     unless File.exist?(disk)
       vb.customize ['createhd', '--filename', disk, '--variant', 'Fixed', '--size', 5 * 1024]
     end
-    vb.customize ['storageattach', :id,  '--storagectl', 'IDE Controller', '--port', 1, '--device', 0, '--type', 'hdd', '--medium', disk]
+    vb.customize ['storageattach', :id,  '--storagectl', 'IDE', '--port', 1, '--device', 0, '--type', 'hdd', '--medium', disk]
   end
 
   config.vm.provision :shell, :name => "sysconfig", :inline => $sysconfig
